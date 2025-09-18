@@ -10,11 +10,10 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// File path for storing recipes
+// Use Render's writable temp directory
 const dataFilePath = path.join('/tmp', 'recipes.json');
 
-
-// Helper: Read recipes from file
+// Ensure the file exists before reading
 function readRecipes() {
   try {
     if (!fs.existsSync(dataFilePath)) {
@@ -28,38 +27,41 @@ function readRecipes() {
   }
 }
 
-// Helper: Write recipes to file
 function writeRecipes(recipes) {
   try {
     fs.writeFileSync(dataFilePath, JSON.stringify(recipes, null, 2));
   } catch (err) {
-    throw new Error('Failed to write to file');
+    console.error('Write error:', err.message);
+    throw new Error('Failed to write data');
   }
 }
 
 // Root route
 app.get('/', (req, res) => {
-  res.send('Welcome to the Recipe Sharing API!');
+  res.send('Welcome to Recipe API 🚀 Use /api/recipes to access recipes.');
 });
 
 // GET all recipes
 app.get('/api/recipes', (req, res) => {
-  const recipes = readRecipes();
-  res.json(recipes);
+  try {
+    const recipes = readRecipes();
+    res.json(recipes);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to read data' });
+  }
 });
 
 // POST a new recipe
 app.post('/api/recipes', (req, res) => {
   const { title, ingredients, instructions, cookTime } = req.body;
 
-  // Basic validation
   if (
     typeof title !== 'string' ||
     !Array.isArray(ingredients) ||
     typeof instructions !== 'string' ||
     typeof cookTime !== 'number'
   ) {
-    return res.status(400).json({ error: 'Invalid input' });
+    return res.status(400).json({ error: 'Invalid input format' });
   }
 
   const newRecipe = {
@@ -74,15 +76,13 @@ app.post('/api/recipes', (req, res) => {
     const recipes = readRecipes();
     recipes.push(newRecipe);
     writeRecipes(recipes);
-    res.status(201).json({ message: 'Recipe created successfully', recipe: newRecipe });
+    res.status(201).json({ message: 'Recipe added successfully', recipe: newRecipe });
   } catch (err) {
-    console.error('Error saving recipe:', err.message);
-    res.status(500).json({ error: 'Failed to create recipe' });
+    res.status(500).json({ error: 'Failed to save recipe' });
   }
 });
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`✅ Server running on http://localhost:${PORT}`);
 });
-console.log('Reading from:', dataFilePath);
