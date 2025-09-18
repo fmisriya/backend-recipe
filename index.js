@@ -1,59 +1,88 @@
-import express from "express";
-import fs from "fs";
+const express = require('express');
+const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
+app.use(cors());
 app.use(express.json());
 
-const filePath = "./recipes.json"; // recipes.json must be in same folder as index.js
+// File path for storing recipes
+const dataFilePath = path.join('/tmp', 'recipes.json');
 
-// Default route
-app.get("/", (req, res) => {
-  res.send("Welcome to Recipe API 🚀 Use /api/recipes to access recipes.");
+
+// Helper: Read recipes from file
+function readRecipes() {
+  try {
+    if (!fs.existsSync(dataFilePath)) {
+      fs.writeFileSync(dataFilePath, '[]');
+    }
+    const data = fs.readFileSync(dataFilePath, 'utf-8');
+    return JSON.parse(data);
+  } catch (err) {
+    console.error('Read error:', err.message);
+    return [];
+  }
+}
+
+// Helper: Write recipes to file
+function writeRecipes(recipes) {
+  try {
+    fs.writeFileSync(dataFilePath, JSON.stringify(recipes, null, 2));
+  } catch (err) {
+    throw new Error('Failed to write to file');
+  }
+}
+
+// Root route
+app.get('/', (req, res) => {
+  res.send('Welcome to the Recipe Sharing API!');
 });
 
 // GET all recipes
-app.get("/api/recipes", (req, res) => {
-  fs.readFile(filePath, "utf-8", (err, data) => {
-    if (err) {
-      return res.status(500).json({ error: "Failed to read data" });
-    }
-    try {
-      const recipes = JSON.parse(data || "[]");
-      res.json(recipes);
-    } catch (e) {
-      res.status(500).json({ error: "Invalid JSON format in recipes.json" });
-    }
-  });
+app.get('/api/recipes', (req, res) => {
+  const recipes = readRecipes();
+  res.json(recipes);
 });
 
 // POST a new recipe
-app.post("/api/recipes", (req, res) => {
-  const newRecipe = req.body;
+app.post('/api/recipes', (req, res) => {
+  const { title, ingredients, instructions, cookTime } = req.body;
 
-  fs.readFile(filePath, "utf-8", (err, data) => {
-    if (err) {
-      return res.status(500).json({ error: "Failed to read data" });
-    }
+  // Basic validation
+  if (
+    typeof title !== 'string' ||
+    !Array.isArray(ingredients) ||
+    typeof instructions !== 'string' ||
+    typeof cookTime !== 'number'
+  ) {
+    return res.status(400).json({ error: 'Invalid input' });
+  }
 
-    let recipes = [];
-    try {
-      recipes = JSON.parse(data || "[]");
-    } catch (e) {
-      return res.status(500).json({ error: "Invalid JSON format in recipes.json" });
-    }
+  const newRecipe = {
+    id: Date.now(),
+    title,
+    ingredients,
+    instructions,
+    cookTime
+  };
 
+  try {
+    const recipes = readRecipes();
     recipes.push(newRecipe);
-
-    fs.writeFile(filePath, JSON.stringify(recipes, null, 2), (err) => {
-      if (err) {
-        return res.status(500).json({ error: "Failed to save data" });
-      }
-      res.status(201).json(newRecipe);
-    });
-  });
+    writeRecipes(recipes);
+    res.status(201).json({ message: 'Recipe created successfully', recipe: newRecipe });
+  } catch (err) {
+    console.error('Error saving recipe:', err.message);
+    res.status(500).json({ error: 'Failed to create recipe' });
+  }
 });
 
 // Start server
-app.listen(3000, () => {
-  console.log("✅ Server running on http://localhost:3000");
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
+console.log('Reading from:', dataFilePath);
